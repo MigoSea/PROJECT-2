@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard | Project2 Blog</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <div class="site-brand">Project2 Blog</div>
+      <nav class="site-nav">
+        <a href="index.html">Home</a>
+        <button class="secondary hidden" id="settingsButton">Settings</button>
+        <button class="secondary logout-button" id="logoutButton">Logout</button>
+      </nav>
+    </header>
+
+    <section class="section-heading">
+      <div>
+        <h2>Your Dashboard</h2>
+        <p style="color: var(--muted); margin-top: 8px;">Create posts, review content, and manage your feed.</p>
+      </div>
+    </section>
+
+    <div class="grid-3">
+      <div class="panel">
+        <h3>Create a new post</h3>
+        <form id="postForm">
+          <input id="title" placeholder="Title" required>
+          <textarea id="body" placeholder="Write your post here..." required></textarea>
+          <button type="submit">Publish Post</button>
+        </form>
+        <div id="status" class="status" style="display:none;"></div>
+      </div>
+
+      <div class="panel" style="grid-column: span 2;">
+        <div class="section-heading">
+          <h3>Recent posts</h3>
+        </div>
+        <div id="feed" class="card-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    const statusEl = document.getElementById('status');
+    if (!token) window.location.href = 'login.html';
+
+    function showStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.style.display = 'block';
+      statusEl.style.background = isError ? 'rgba(217, 55, 74, 0.1)' : 'rgba(47, 128, 237, 0.08)';
+      statusEl.style.color = isError ? '#8b1420' : '#0f305e';
+    }
+
+    async function loadPosts() {
+      const res = await fetch('/posts', { headers: { 'authorization': token } });
+      if (!res.ok) return;
+      const posts = await res.json();
+      document.getElementById('feed').innerHTML = posts.map(p =>
+        `<div class="post-card"><h4>${p.title}</h4><p>${p.body}</p><small>by ${p.author?.username || 'Unknown'}</small></div>`
+      ).join('');
+    }
+
+    document.getElementById('postForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const title = document.getElementById('title').value.trim();
+      const body = document.getElementById('body').value.trim();
+      if (!title || !body) {
+        showStatus('Title and body are required.', true);
+        return;
+      }
+      const res = await fetch('/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'authorization': token },
+        body: JSON.stringify({ title, body })
+      });
+      if (res.ok) {
+        showStatus('Your post was published successfully.');
+        document.getElementById('postForm').reset();
+        loadPosts();
+      } else {
+        const error = await res.text();
+        showStatus(error || 'Unable to publish post.', true);
+      }
+    });
+
+    document.getElementById('logoutButton').addEventListener('click', () => {
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    });
+
+    const settingsButton = document.getElementById('settingsButton');
+    function parseJwt(token) {
+      if (!token) return null;
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(Array.prototype.map.call(atob(base64), c => '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    const payload = parseJwt(token);
+    if (payload && payload.role === 'admin') {
+      settingsButton.classList.remove('hidden');
+      settingsButton.addEventListener('click', () => {
+        window.location.href = 'admin-dashboard.html';
+      });
+    }
+
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+    loadPosts();
+  </script>
+</body>
+</html>
